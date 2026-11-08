@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+run/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Java
+bin/
+*.class
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Publicação local
+repo/
