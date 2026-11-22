@@ -32,6 +32,13 @@ public final class ScalingConfig {
     /** Tiers do Apotheosis, em ordem (mesmos nomes de {@code WorldTier#getSerializedName()}). */
     public static final String[] TIERS = { "haven", "frontier", "ascent", "summit", "pinnacle" };
 
+    private static final double[] DEFAULT_HEALTH = { 1.0, 1.08, 1.16, 1.25, 1.35 };
+    private static final double[] DEFAULT_DAMAGE = { 1.0, 1.05, 1.1, 1.15, 1.2 };
+    private static final double[] DEFAULT_ARMOR = { 1.0, 1.05, 1.1, 1.15, 1.2 };
+    private static final double[] DEFAULT_BOSS_HEALTH = { 1.0, 1.1, 1.2, 1.35, 1.5 };
+    private static final double[] DEFAULT_BOSS_DAMAGE = { 1.0, 1.08, 1.15, 1.25, 1.35 };
+    private static final double[] DEFAULT_BOSS_ARMOR = { 1.0, 1.05, 1.12, 1.2, 1.3 };
+
     public static final ModConfigSpec SPEC;
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
@@ -49,7 +56,8 @@ public final class ScalingConfig {
     private static final ModConfigSpec.DoubleValue PLAYER_SCALING_RADIUS;
     private static final ModConfigSpec.DoubleValue PLAYER_SCALING_EXPONENT;
     private static final ModConfigSpec.BooleanValue PLAYER_SCALING_DYNAMIC;
-    private static final ModConfigSpec.DoubleValue ARMOR_CAP;
+    private static final ModConfigSpec.DoubleValue BOSS_ARMOR_CAP;
+    private static final ModConfigSpec.DoubleValue MOB_ARMOR_CAP;
     private static final ModConfigSpec.DoubleValue MOD_MULT_MINECRAFT;
     private static final ModConfigSpec.DoubleValue MOD_MULT_DEFAULT;
     private static final ModConfigSpec.DoubleValue MOD_MULT_APOTHEOSIS;
@@ -58,6 +66,9 @@ public final class ScalingConfig {
     private static final Map<String, ModConfigSpec.DoubleValue> MAX_HEALTH_MULT = new HashMap<>();
     private static final Map<String, ModConfigSpec.DoubleValue> ATTACK_DAMAGE_MULT = new HashMap<>();
     private static final Map<String, ModConfigSpec.DoubleValue> ARMOR_MULT = new HashMap<>();
+    private static final Map<String, ModConfigSpec.DoubleValue> BOSS_MAX_HEALTH_MULT = new HashMap<>();
+    private static final Map<String, ModConfigSpec.DoubleValue> BOSS_ATTACK_DAMAGE_MULT = new HashMap<>();
+    private static final Map<String, ModConfigSpec.DoubleValue> BOSS_ARMOR_MULT = new HashMap<>();
 
     static {
         BUILDER.push("general");
@@ -98,9 +109,12 @@ public final class ScalingConfig {
         BUILDER.pop();
 
         BUILDER.push("limits");
-        ARMOR_CAP = BUILDER
-            .comment("Teto máximo de armadura (a redução de dano satura em 30 = 80%).")
-            .defineInRange("armor_cap", 30.0, 0.0, 100.0);
+        BOSS_ARMOR_CAP = BUILDER
+            .comment("Teto máximo da armadura produzida pelo nosso scaling para BOSSES (30 = 80% de redução de dano).")
+            .defineInRange("boss_armor_cap", 30.0, 0.0, 100.0);
+        MOB_ARMOR_CAP = BUILDER
+            .comment("Teto máximo da armadura produzida pelo nosso scaling para MOBS COMUNS (armadura alta 'mura' armas de dano baixo).")
+            .defineInRange("mob_armor_cap", 10.0, 0.0, 100.0);
         BUILDER.pop();
 
         BUILDER.push("mod_scaling");
@@ -109,7 +123,7 @@ public final class ScalingConfig {
             .defineInRange("minecraft", 1.0, 0.0, 100.0);
         MOD_MULT_DEFAULT = BUILDER
             .comment("Multiplicador extra para mobs de outros mods (fallback) aplicado sobre o multiplicador do tier.")
-            .defineInRange("default", 1.5, 0.0, 100.0);
+            .defineInRange("default", 1.2, 0.0, 100.0);
         MOD_MULT_APOTHEOSIS = BUILDER
             .comment("Multiplicador extra para bosses do Apotheosis (Invaders/Elites), aplicado sobre o multiplicador do tier.")
             .defineInRange("apotheosis", 0.7, 0.0, 100.0);
@@ -118,22 +132,36 @@ public final class ScalingConfig {
             .defineListAllowEmpty("overrides", List.of(), () -> "", o -> o instanceof String);
         BUILDER.pop();
 
-        double[] health = { 1.0, 1.15, 1.35, 1.6, 2.0 };
-        double[] damage = { 1.0, 1.15, 1.35, 1.6, 2.0 };
-        double[] armor = { 1.0, 1.1, 1.2, 1.3, 1.5 };
         BUILDER.push("multipliers");
         for (int i = 0; i < TIERS.length; i++) {
             String tier = TIERS[i];
             BUILDER.push(tier);
             MAX_HEALTH_MULT.put(tier, BUILDER
                 .comment("Multiplicador de Max Health no tier " + tier + ".")
-                .defineInRange("max_health", health[i], 0.0, 1000.0));
+                .defineInRange("max_health", DEFAULT_HEALTH[i], 0.0, 1000.0));
             ATTACK_DAMAGE_MULT.put(tier, BUILDER
                 .comment("Multiplicador de Attack Damage no tier " + tier + ".")
-                .defineInRange("attack_damage", damage[i], 0.0, 1000.0));
+                .defineInRange("attack_damage", DEFAULT_DAMAGE[i], 0.0, 1000.0));
             ARMOR_MULT.put(tier, BUILDER
                 .comment("Multiplicador de Armor no tier " + tier + ".")
-                .defineInRange("armor", armor[i], 0.0, 1000.0));
+                .defineInRange("armor", DEFAULT_ARMOR[i], 0.0, 1000.0));
+            BUILDER.pop();
+        }
+        BUILDER.pop();
+
+        BUILDER.push("boss_multipliers");
+        for (int i = 0; i < TIERS.length; i++) {
+            String tier = TIERS[i];
+            BUILDER.push(tier);
+            BOSS_MAX_HEALTH_MULT.put(tier, BUILDER
+                .comment("Multiplicador de Max Health para BOSSES no tier " + tier + ".")
+                .defineInRange("max_health", DEFAULT_BOSS_HEALTH[i], 0.0, 1000.0));
+            BOSS_ATTACK_DAMAGE_MULT.put(tier, BUILDER
+                .comment("Multiplicador de Attack Damage para BOSSES no tier " + tier + ".")
+                .defineInRange("attack_damage", DEFAULT_BOSS_DAMAGE[i], 0.0, 1000.0));
+            BOSS_ARMOR_MULT.put(tier, BUILDER
+                .comment("Multiplicador de Armor para BOSSES no tier " + tier + ".")
+                .defineInRange("armor", DEFAULT_BOSS_ARMOR[i], 0.0, 1000.0));
             BUILDER.pop();
         }
         BUILDER.pop();
@@ -205,8 +233,12 @@ public final class ScalingConfig {
         return PLAYER_SCALING_DYNAMIC.get();
     }
 
-    public static double armorCap() {
-        return ARMOR_CAP.get();
+    public static double bossArmorCap() {
+        return BOSS_ARMOR_CAP.get();
+    }
+
+    public static double mobArmorCap() {
+        return MOB_ARMOR_CAP.get();
     }
 
     public static double modMultMinecraft() {
@@ -260,6 +292,21 @@ public final class ScalingConfig {
         return v == null ? 1.0 : v.get();
     }
 
+    public static double bossMaxHealthMultiplier(String tier) {
+        ModConfigSpec.DoubleValue v = BOSS_MAX_HEALTH_MULT.get(tier);
+        return v == null ? 1.0 : v.get();
+    }
+
+    public static double bossAttackDamageMultiplier(String tier) {
+        ModConfigSpec.DoubleValue v = BOSS_ATTACK_DAMAGE_MULT.get(tier);
+        return v == null ? 1.0 : v.get();
+    }
+
+    public static double bossArmorMultiplier(String tier) {
+        ModConfigSpec.DoubleValue v = BOSS_ARMOR_MULT.get(tier);
+        return v == null ? 1.0 : v.get();
+    }
+
     public static void debug(String msg, Object... args) {
         if (DEBUG_LOG.get()) {
             ApotheosisBossScaling.LOGGER.debug("[ApothBossScaling] " + msg, args);
@@ -288,11 +335,43 @@ public final class ScalingConfig {
                 case "player_scaling.radius" -> PLAYER_SCALING_RADIUS.set(clamp(Double.parseDouble(value), 1.0, 512.0));
                 case "player_scaling.exponent" -> PLAYER_SCALING_EXPONENT.set(clamp(Double.parseDouble(value), 0.0, 4.0));
                 case "player_scaling.dynamic" -> PLAYER_SCALING_DYNAMIC.set(Boolean.parseBoolean(value));
-                case "armor_cap" -> ARMOR_CAP.set(clamp(Double.parseDouble(value), 0.0, 100.0));
+                case "boss_armor_cap" -> BOSS_ARMOR_CAP.set(clamp(Double.parseDouble(value), 0.0, 100.0));
+                case "mob_armor_cap" -> MOB_ARMOR_CAP.set(clamp(Double.parseDouble(value), 0.0, 100.0));
                 case "mod_scaling.minecraft" -> MOD_MULT_MINECRAFT.set(clamp(Double.parseDouble(value), 0.0, 100.0));
                 case "mod_scaling.default" -> MOD_MULT_DEFAULT.set(clamp(Double.parseDouble(value), 0.0, 100.0));
                 case "mod_scaling.apotheosis" -> MOD_MULT_APOTHEOSIS.set(clamp(Double.parseDouble(value), 0.0, 100.0));
                 case "mod_scaling.overrides" -> MOD_MULT_OVERRIDES.set(parseList(value));
+                case "reset_tiers" -> {
+                    for (int i = 0; i < TIERS.length; i++) {
+                        String tier = TIERS[i];
+                        MAX_HEALTH_MULT.get(tier).set(DEFAULT_HEALTH[i]);
+                        ATTACK_DAMAGE_MULT.get(tier).set(DEFAULT_DAMAGE[i]);
+                        ARMOR_MULT.get(tier).set(DEFAULT_ARMOR[i]);
+                    }
+                }
+                case "reset_boss_tiers" -> {
+                    for (int i = 0; i < TIERS.length; i++) {
+                        String tier = TIERS[i];
+                        BOSS_MAX_HEALTH_MULT.get(tier).set(DEFAULT_BOSS_HEALTH[i]);
+                        BOSS_ATTACK_DAMAGE_MULT.get(tier).set(DEFAULT_BOSS_DAMAGE[i]);
+                        BOSS_ARMOR_MULT.get(tier).set(DEFAULT_BOSS_ARMOR[i]);
+                    }
+                }
+                case "preset" -> {
+                    Presets.Preset preset = Presets.byId(value);
+                    if (preset == null) {
+                        return false;
+                    }
+                    for (int i = 0; i < TIERS.length; i++) {
+                        String tier = TIERS[i];
+                        MAX_HEALTH_MULT.get(tier).set(preset.commonHealth()[i]);
+                        ATTACK_DAMAGE_MULT.get(tier).set(preset.commonDamage()[i]);
+                        ARMOR_MULT.get(tier).set(preset.commonArmor()[i]);
+                        BOSS_MAX_HEALTH_MULT.get(tier).set(preset.bossHealth()[i]);
+                        BOSS_ATTACK_DAMAGE_MULT.get(tier).set(preset.bossDamage()[i]);
+                        BOSS_ARMOR_MULT.get(tier).set(preset.bossArmor()[i]);
+                    }
+                }
                 default -> {
                     if (field.startsWith("max_health.")) {
                         String tier = field.substring("max_health.".length());
@@ -311,6 +390,27 @@ public final class ScalingConfig {
                     } else if (field.startsWith("armor.")) {
                         String tier = field.substring("armor.".length());
                         ModConfigSpec.DoubleValue v = ARMOR_MULT.get(tier);
+                        if (v == null) {
+                            return false;
+                        }
+                        v.set(clamp(Double.parseDouble(value), 0.0, 1000.0));
+                    } else if (field.startsWith("boss_max_health.")) {
+                        String tier = field.substring("boss_max_health.".length());
+                        ModConfigSpec.DoubleValue v = BOSS_MAX_HEALTH_MULT.get(tier);
+                        if (v == null) {
+                            return false;
+                        }
+                        v.set(clamp(Double.parseDouble(value), 0.0, 1000.0));
+                    } else if (field.startsWith("boss_attack_damage.")) {
+                        String tier = field.substring("boss_attack_damage.".length());
+                        ModConfigSpec.DoubleValue v = BOSS_ATTACK_DAMAGE_MULT.get(tier);
+                        if (v == null) {
+                            return false;
+                        }
+                        v.set(clamp(Double.parseDouble(value), 0.0, 1000.0));
+                    } else if (field.startsWith("boss_armor.")) {
+                        String tier = field.substring("boss_armor.".length());
+                        ModConfigSpec.DoubleValue v = BOSS_ARMOR_MULT.get(tier);
                         if (v == null) {
                             return false;
                         }
@@ -334,12 +434,13 @@ public final class ScalingConfig {
         String tier = TierResolver.tierName(player);
         return new ConfigSnapshotPayload(
             isEnabled(), scaleCommonMobs(), scaleBosses(), scaleMaxHealth(), scaleAttackDamage(), scaleArmor(), debugLog(),
-            bossHealthThreshold(), armorCap(),
+            bossHealthThreshold(), bossArmorCap(), mobArmorCap(),
             playerScalingEnabled(), playerScalingRadius(), playerScalingExponent(), playerScalingDynamic(),
             modMultMinecraft(), modMultDefault(), modMultApotheosis(), String.join(",", modMultOverrides()),
             String.join(",", excludedEntities()),
             String.join(",", bossEntities()),
             maxHealthMultiplierList(), attackDamageMultiplierList(), armorMultiplierList(),
+            bossMaxHealthMultiplierList(), bossAttackDamageMultiplierList(), bossArmorMultiplierList(),
             tier,
             nearbyScaled(player),
             modNamespaces());
@@ -365,6 +466,30 @@ public final class ScalingConfig {
         List<Double> list = new ArrayList<>(TIERS.length);
         for (String t : TIERS) {
             list.add(armorMultiplier(t));
+        }
+        return list;
+    }
+
+    private static List<Double> bossMaxHealthMultiplierList() {
+        List<Double> list = new ArrayList<>(TIERS.length);
+        for (String t : TIERS) {
+            list.add(bossMaxHealthMultiplier(t));
+        }
+        return list;
+    }
+
+    private static List<Double> bossAttackDamageMultiplierList() {
+        List<Double> list = new ArrayList<>(TIERS.length);
+        for (String t : TIERS) {
+            list.add(bossAttackDamageMultiplier(t));
+        }
+        return list;
+    }
+
+    private static List<Double> bossArmorMultiplierList() {
+        List<Double> list = new ArrayList<>(TIERS.length);
+        for (String t : TIERS) {
+            list.add(bossArmorMultiplier(t));
         }
         return list;
     }

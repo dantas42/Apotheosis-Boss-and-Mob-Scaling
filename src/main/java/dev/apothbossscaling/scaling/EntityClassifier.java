@@ -2,6 +2,7 @@ package dev.apothbossscaling.scaling;
 
 import dev.apothbossscaling.config.ScalingConfig;
 import java.util.List;
+import java.util.Set;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Mob;
@@ -10,15 +11,18 @@ import net.minecraft.world.entity.monster.Monster;
 /**
  * Classifica entidades em "boss" ou "mob comum" sem depender de API universal de boss (que não existe).
  * <p>
- * Heurística (Fase 2):
+ * Heurística:
  * <ul>
- * <li>Boss: tipo na lista {@code boss_entities} da config, ou vida base máxima &gt;= limiar configurável.</li>
+ * <li>Boss: tipo na lista {@code boss_entities}, ou um boss vanilla conhecido, ou vida base &gt;= limiar.</li>
  * <li>Mob comum: hostil ({@link Monster}) que não é boss.</li>
  * <li>Animais passivos/neutros nunca são escalados.</li>
  * </ul>
- * Detecção por boss bar ({@code ServerBossEvent}) e overrides por entidade entram na Fase 3.
  */
 public final class EntityClassifier {
+
+    /** Bosses vanilla sempre tratados como boss (não há API de boss bar; estes são os canônicos). */
+    private static final Set<String> VANILLA_BOSSES = Set.of(
+        "minecraft:wither", "minecraft:ender_dragon", "minecraft:warden", "minecraft:elder_guardian");
 
     private EntityClassifier() {}
 
@@ -26,6 +30,9 @@ public final class EntityClassifier {
         String id = entityId(mob);
         List<String> bossList = ScalingConfig.bossEntities();
         if (bossList.contains(id)) {
+            return true;
+        }
+        if (VANILLA_BOSSES.contains(id)) {
             return true;
         }
         return mob.getMaxHealth() >= ScalingConfig.bossHealthThreshold();

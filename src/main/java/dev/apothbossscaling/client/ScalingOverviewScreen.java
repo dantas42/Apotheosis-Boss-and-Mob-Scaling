@@ -1,5 +1,6 @@
 package dev.apothbossscaling.client;
 
+import dev.apothbossscaling.config.Presets;
 import dev.apothbossscaling.config.ScalingConfig;
 import dev.apothbossscaling.net.ConfigSnapshotPayload;
 import dev.apothbossscaling.net.ConfigUpdatePayload;
@@ -33,6 +34,7 @@ public final class ScalingOverviewScreen extends Screen {
 
     private ConfigSnapshotPayload snapshot;
     private int currentTab;
+    private boolean tiersBoss;
     private String selectedMod;
     private int modScroll;
     private int yModsList;
@@ -41,7 +43,8 @@ public final class ScalingOverviewScreen extends Screen {
     private final EditBox[] damageBoxes = new EditBox[ScalingConfig.TIERS.length];
     private final EditBox[] armorBoxes = new EditBox[ScalingConfig.TIERS.length];
     private EditBox thresholdBox;
-    private EditBox armorCapBox;
+    private EditBox bossArmorCapBox;
+    private EditBox mobArmorCapBox;
     private EditBox excludedBox;
     private EditBox bossBox;
     private EditBox radiusBox;
@@ -98,20 +101,68 @@ public final class ScalingOverviewScreen extends Screen {
     }
 
     private void buildTiers() {
-        int y = 50;
+        // Presets de dificuldade
+        for (int i = 0; i < Presets.ALL.size(); i++) {
+            Presets.Preset p = Presets.ALL.get(i);
+            Button btn = Button.builder(Component.literal(p.name()), b -> applyPreset(p.id()))
+                .bounds(10 + i * 80, 48, 74, 20).build();
+            btn.active = canEdit();
+            addRenderableWidget(btn);
+        }
+
+        Button mode = Button.builder(Component.literal("Mode: " + (tiersBoss ? "Boss" : "Common")), b -> {
+            this.tiersBoss = !this.tiersBoss;
+            this.rebuildWidgets();
+        }).bounds(10, 74, 140, 20).build();
+        addRenderableWidget(mode);
+
+        List<Double> healthList;
+        List<Double> damageList;
+        List<Double> armorList;
+        if (snapshot == null) {
+            healthList = damageList = armorList = null;
+        } else if (tiersBoss) {
+            healthList = snapshot.bossMaxHealthMultipliers();
+            damageList = snapshot.bossAttackDamageMultipliers();
+            armorList = snapshot.bossArmorMultipliers();
+        } else {
+            healthList = snapshot.maxHealthMultipliers();
+            damageList = snapshot.attackDamageMultipliers();
+            armorList = snapshot.armorMultipliers();
+        }
+
+        int y = 104;
         for (int i = 0; i < ScalingConfig.TIERS.length; i++) {
             int rowY = y + i * 22;
-            healthBoxes[i] = addEditBox(X_BOX1, rowY, BOX_W, trim(mult(snapshot == null ? null : snapshot.maxHealthMultipliers(), i, 1.0)));
-            damageBoxes[i] = addEditBox(X_BOX2, rowY, BOX_W, trim(mult(snapshot == null ? null : snapshot.attackDamageMultipliers(), i, 1.0)));
-            armorBoxes[i] = addEditBox(X_BOX3, rowY, BOX_W, trim(mult(snapshot == null ? null : snapshot.armorMultipliers(), i, 1.0)));
+            healthBoxes[i] = addEditBox(X_BOX1, rowY, BOX_W, trim(mult(healthList, i, 1.0)));
+            damageBoxes[i] = addEditBox(X_BOX2, rowY, BOX_W, trim(mult(damageList, i, 1.0)));
+            armorBoxes[i] = addEditBox(X_BOX3, rowY, BOX_W, trim(mult(armorList, i, 1.0)));
         }
-        addApplyButton(y + ScalingConfig.TIERS.length * 22 + 8, this::applyTiers);
+        int by = y + ScalingConfig.TIERS.length * 22 + 8;
+        addApplyButton(by, this::applyTiers);
+        addResetButton(by, this::resetTiers);
+    }
+
+    private void resetTiers() {
+        if (!canEdit()) {
+            return;
+        }
+        send(tiersBoss ? "reset_boss_tiers" : "reset_tiers", "");
+    }
+
+    private void applyPreset(String id) {
+        if (!canEdit()) {
+            return;
+        }
+        send("preset", id);
     }
 
     private void buildBoss() {
         int y = 50;
         thresholdBox = addEditBox(X_BOX1, y, BOX_W, snapshot == null ? "100.0" : trim(snapshot.bossHealthThreshold()));
-        armorCapBox = addEditBox(X_BOX3, y, BOX_W, snapshot == null ? "30.0" : trim(snapshot.armorCap()));
+        bossArmorCapBox = addEditBox(X_BOX3, y, BOX_W, snapshot == null ? "30.0" : trim(snapshot.bossArmorCap()));
+        y += 24;
+        mobArmorCapBox = addEditBox(X_BOX1, y, BOX_W, snapshot == null ? "10.0" : trim(snapshot.mobArmorCap()));
         y += 24;
         excludedBox = addEditBox(X_BOX1, y, 240, snapshot == null ? "" : snapshot.excludedEntities());
         y += 24;
@@ -130,7 +181,7 @@ public final class ScalingOverviewScreen extends Screen {
     }
 
     private void buildMods() {
-        int y = 50;
+        int y = 56;
         minecraftMultBox = addEditBox(X_BOX1, y, BOX_W, snapshot == null ? "1.0" : trim(snapshot.modMultMinecraft()));
         defaultMultBox = addEditBox(X_BOX2, y, BOX_W, snapshot == null ? "1.5" : trim(snapshot.modMultDefault()));
         apotheosisMultBox = addEditBox(X_BOX3, y, BOX_W, snapshot == null ? "0.7" : trim(snapshot.modMultApotheosis()));
@@ -225,14 +276,21 @@ public final class ScalingOverviewScreen extends Screen {
         addRenderableWidget(btn);
     }
 
+    private void addResetButton(int y, Runnable action) {
+        Button btn = Button.builder(Component.literal("Reset"), b -> action.run()).bounds(80, y, 60, 20).build();
+        btn.active = canEdit();
+        addRenderableWidget(btn);
+    }
+
     private void applyTiers() {
         if (!canEdit()) {
             return;
         }
+        String prefix = tiersBoss ? "boss_" : "";
         for (int i = 0; i < ScalingConfig.TIERS.length; i++) {
-            send("max_health." + ScalingConfig.TIERS[i], healthBoxes[i].getValue());
-            send("attack_damage." + ScalingConfig.TIERS[i], damageBoxes[i].getValue());
-            send("armor." + ScalingConfig.TIERS[i], armorBoxes[i].getValue());
+            send(prefix + "max_health." + ScalingConfig.TIERS[i], healthBoxes[i].getValue());
+            send(prefix + "attack_damage." + ScalingConfig.TIERS[i], damageBoxes[i].getValue());
+            send(prefix + "armor." + ScalingConfig.TIERS[i], armorBoxes[i].getValue());
         }
     }
 
@@ -241,7 +299,8 @@ public final class ScalingOverviewScreen extends Screen {
             return;
         }
         send("boss_health_threshold", thresholdBox.getValue());
-        send("armor_cap", armorCapBox.getValue());
+        send("boss_armor_cap", bossArmorCapBox.getValue());
+        send("mob_armor_cap", mobArmorCapBox.getValue());
         send("excluded_entities", excludedBox.getValue());
         send("boss_entities", bossBox.getValue());
     }
@@ -349,7 +408,8 @@ public final class ScalingOverviewScreen extends Screen {
             }
             case 2 -> {
                 g.drawString(this.font, "Health thr:", 10, thresholdBox.getY() + 5, LABEL_COLOR);
-                g.drawString(this.font, "Armor cap:", X_BOX2, armorCapBox.getY() + 5, LABEL_COLOR);
+                g.drawString(this.font, "Boss cap:", X_BOX2, bossArmorCapBox.getY() + 5, LABEL_COLOR);
+                g.drawString(this.font, "Mob cap:", 10, mobArmorCapBox.getY() + 5, LABEL_COLOR);
                 g.drawString(this.font, "Excluded:", 10, excludedBox.getY() + 5, LABEL_COLOR);
                 g.drawString(this.font, "Bosses:", 10, bossBox.getY() + 5, LABEL_COLOR);
             }
@@ -361,7 +421,8 @@ public final class ScalingOverviewScreen extends Screen {
                 g.drawString(this.font, "vanilla", X_BOX1, minecraftMultBox.getY() - 12, LABEL_COLOR);
                 g.drawString(this.font, "others", X_BOX2, minecraftMultBox.getY() - 12, LABEL_COLOR);
                 g.drawString(this.font, "apoth", X_BOX3, minecraftMultBox.getY() - 12, LABEL_COLOR);
-                g.drawString(this.font, "Mods (clique para editar):", 10, yModsList - 12, HEADER_COLOR);
+                int modCount = snapshot == null ? 0 : snapshot.modNamespaces().size();
+                g.drawString(this.font, "Mods (" + modCount + ", role p/ navegar):", 10, yModsList - 12, HEADER_COLOR);
                 if (selectedMod != null) {
                     g.drawString(this.font, selectedMod + " (multiplicador):", 180, selectedModMultBox.getY() - 12, LABEL_COLOR);
                 }
@@ -371,8 +432,15 @@ public final class ScalingOverviewScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (currentTab != 4) {
+            return false;
+        }
+        int old = modScroll;
         modScroll -= (int) verticalAmount;
         modScroll = Math.max(0, modScroll);
+        if (modScroll != old) {
+            this.rebuildWidgets();
+        }
         return true;
     }
 }

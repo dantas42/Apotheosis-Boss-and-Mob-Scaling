@@ -24,7 +24,8 @@ public record ConfigSnapshotPayload(
     boolean scaleArmor,
     boolean debugLog,
     double bossHealthThreshold,
-    double armorCap,
+    double bossArmorCap,
+    double mobArmorCap,
     boolean playerScalingEnabled,
     double playerScalingRadius,
     double playerScalingExponent,
@@ -38,6 +39,9 @@ public record ConfigSnapshotPayload(
     List<Double> maxHealthMultipliers,
     List<Double> attackDamageMultipliers,
     List<Double> armorMultipliers,
+    List<Double> bossMaxHealthMultipliers,
+    List<Double> bossAttackDamageMultipliers,
+    List<Double> bossArmorMultipliers,
     String currentTier,
     List<EntityInfo> nearby,
     List<String> modNamespaces) implements CustomPacketPayload {
@@ -55,7 +59,8 @@ public record ConfigSnapshotPayload(
             ByteBufCodecs.BOOL.encode(buf, p.scaleArmor);
             ByteBufCodecs.BOOL.encode(buf, p.debugLog);
             ByteBufCodecs.DOUBLE.encode(buf, p.bossHealthThreshold);
-            ByteBufCodecs.DOUBLE.encode(buf, p.armorCap);
+            ByteBufCodecs.DOUBLE.encode(buf, p.bossArmorCap);
+            ByteBufCodecs.DOUBLE.encode(buf, p.mobArmorCap);
             ByteBufCodecs.BOOL.encode(buf, p.playerScalingEnabled);
             ByteBufCodecs.DOUBLE.encode(buf, p.playerScalingRadius);
             ByteBufCodecs.DOUBLE.encode(buf, p.playerScalingExponent);
@@ -69,6 +74,9 @@ public record ConfigSnapshotPayload(
             doubleList().encode(buf, p.maxHealthMultipliers);
             doubleList().encode(buf, p.attackDamageMultipliers);
             doubleList().encode(buf, p.armorMultipliers);
+            doubleList().encode(buf, p.bossMaxHealthMultipliers);
+            doubleList().encode(buf, p.bossAttackDamageMultipliers);
+            doubleList().encode(buf, p.bossArmorMultipliers);
             ByteBufCodecs.STRING_UTF8.encode(buf, p.currentTier);
             entityList().encode(buf, p.nearby);
             stringList().encode(buf, p.modNamespaces);
@@ -83,16 +91,20 @@ public record ConfigSnapshotPayload(
             ByteBufCodecs.BOOL.decode(buf),
             ByteBufCodecs.DOUBLE.decode(buf),
             ByteBufCodecs.DOUBLE.decode(buf),
-            ByteBufCodecs.BOOL.decode(buf),
-            ByteBufCodecs.DOUBLE.decode(buf),
             ByteBufCodecs.DOUBLE.decode(buf),
             ByteBufCodecs.BOOL.decode(buf),
             ByteBufCodecs.DOUBLE.decode(buf),
             ByteBufCodecs.DOUBLE.decode(buf),
+            ByteBufCodecs.BOOL.decode(buf),
+            ByteBufCodecs.DOUBLE.decode(buf),
+            ByteBufCodecs.DOUBLE.decode(buf),
             ByteBufCodecs.DOUBLE.decode(buf),
             ByteBufCodecs.STRING_UTF8.decode(buf),
             ByteBufCodecs.STRING_UTF8.decode(buf),
             ByteBufCodecs.STRING_UTF8.decode(buf),
+            doubleList().decode(buf),
+            doubleList().decode(buf),
+            doubleList().decode(buf),
             doubleList().decode(buf),
             doubleList().decode(buf),
             doubleList().decode(buf),

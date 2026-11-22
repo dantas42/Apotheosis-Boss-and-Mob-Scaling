@@ -16,9 +16,25 @@ O multiplicador final de cada atributo (vida, dano, armadura) é:
 multiplicador final = tier × mod × jogadores
 ```
 
-- **tier** — o multiplicador da seção `multipliers.<tier>` (baseado no World Tier do jogador mais próximo).
+- **tier** — o multiplicador do tier: `multipliers.<tier>` para **mobs comuns** e `boss_multipliers.<tier>` para **bosses** (baseado no World Tier do jogador mais próximo).
 - **mod** — o fator da seção `mod_scaling` (baseado no mod de origem da entidade).
 - **jogadores** — o fator da seção `player_scaling`, aplicado **somente a bosses** (não a mobs comuns).
+
+---
+
+## Presets de dificuldade
+
+A aba **Tiers** tem botões de presets que preenchem todas as curvas (comum + boss) de uma vez.
+Os presets **só** configuram os multiplicadores de tier — não alteram `mod_scaling` nem `player_scaling`.
+
+Multiplicador no Pinnacle (vida, dano e armadura, separados) por preset:
+
+| Preset | Comum vida | Comum dano | Comum armor | Boss vida | Boss dano | Boss armor |
+|---|---|---|---|---|---|---|
+| Balanced | 1.35 | 1.2 | 1.2 | 1.5 | 1.35 | 1.3 |
+| Hard | 1.6 | 1.4 | 1.4 | 1.9 | 1.6 | 1.6 |
+| Brutal | 1.85 | 1.6 | 1.6 | 2.3 | 1.85 | 1.85 |
+| Nightmare | 2.1 | 1.85 | 1.85 | 2.7 | 2.1 | 2.1 |
 
 ---
 
@@ -65,7 +81,10 @@ multiplicador final = tier × mod × jogadores
 
 | Campo | Tipo | Padrão | Descrição |
 |---|---|---|---|
-| `armor_cap` | double | `30.0` | **Teto da armadura produzida pelo nosso scaling.** A redução de dano satura em 30 (80%); acima disso não muda nada. O teto vale só sobre o nosso bônus — **nunca reduzimos** armadura que já existe (gear, Apotheosis, etc.). |
+| `boss_armor_cap` | double | `30.0` | Teto da armadura produzida pelo nosso scaling para **bosses** (30 = 80% de redução de dano). |
+| `mob_armor_cap` | double | `10.0` | Teto da armadura produzida pelo nosso scaling para **mobs comuns** (armadura alta "mura" armas de dano baixo). |
+
+> Os tetos valem só sobre o **nosso bônus** — nunca reduzimos armadura que já existe (gear, Apotheosis, etc.).
 
 ---
 
@@ -76,7 +95,7 @@ O fator `mod` é multiplicado sobre o fator `tier`. A origem é o **namespace** 
 | Campo | Tipo | Padrão | Descrição |
 |---|---|---|---|
 | `minecraft` | double | `1.0` | Fator para mobs **vanilla** (`minecraft:*`). Ex.: tier 2× no Pinnacle → 2× final. |
-| `default` | double | `1.5` | Fator para mobs de **outros mods** (qualquer namespace não listado em `overrides`). Ex.: tier 2× → 3× final. |
+| `default` | double | `1.2` | Fator para mobs de **outros mods** (qualquer namespace não listado em `overrides`). Ex.: tier 1.35× → ~1.62× final. |
 | `apotheosis` | double | `0.7` | Fator **exclusivo** para bosses do Apotheosis (Invaders/Elites, detectados pelas tags internas). Ex.: tier 2× → 1.4× final. |
 | `overrides` | lista | `[]` | Fator por **mod específico**, formato `"modid:multiplicador"`. Ex.: `["iceandfire:1.7", "twilightforest:1.4"]`. |
 
@@ -86,7 +105,7 @@ O fator `mod` é multiplicado sobre o fator `tier`. A origem é o **namespace** 
 
 ---
 
-## `[multipliers.<tier>]` (multiplicadores por tier)
+## `[multipliers.<tier>]` — mobs comuns
 
 Para cada tier (`haven`, `frontier`, `ascent`, `summit`, `pinnacle`):
 
@@ -101,10 +120,26 @@ Padrões:
 | Tier | max_health | attack_damage | armor |
 |---|---|---|---|
 | haven | 1.0 | 1.0 | 1.0 |
-| frontier | 1.15 | 1.15 | 1.1 |
-| ascent | 1.35 | 1.35 | 1.2 |
-| summit | 1.6 | 1.6 | 1.3 |
-| pinnacle | 2.0 | 2.0 | 1.5 |
+| frontier | 1.08 | 1.05 | 1.05 |
+| ascent | 1.16 | 1.1 | 1.1 |
+| summit | 1.25 | 1.15 | 1.15 |
+| pinnacle | 1.35 | 1.2 | 1.2 |
+
+---
+
+## `[boss_multipliers.<tier>]` — bosses
+
+Mesma estrutura de `multipliers`, mas aplicada **exclusivamente a bosses** (mesmos campos: `max_health`, `attack_damage`, `armor`). Permite escalar bosses separadamente dos mobs comuns.
+
+Padrões:
+
+| Tier | max_health | attack_damage | armor |
+|---|---|---|---|
+| haven | 1.0 | 1.0 | 1.0 |
+| frontier | 1.1 | 1.08 | 1.05 |
+| ascent | 1.2 | 1.15 | 1.12 |
+| summit | 1.35 | 1.25 | 1.2 |
+| pinnacle | 1.5 | 1.35 | 1.3 |
 
 ---
 
@@ -132,11 +167,12 @@ exponent = 0.5
 dynamic = true
 
 [limits]
-armor_cap = 30.0
+boss_armor_cap = 30.0
+mob_armor_cap = 10.0
 
 [mod_scaling]
 minecraft = 1.0
-default = 1.5
+default = 1.2
 apotheosis = 0.7
 overrides = []
 
@@ -146,24 +182,49 @@ attack_damage = 1.0
 armor = 1.0
 
 [multipliers.frontier]
-max_health = 1.15
-attack_damage = 1.15
-armor = 1.1
+max_health = 1.08
+attack_damage = 1.05
+armor = 1.05
 
 [multipliers.ascent]
-max_health = 1.35
-attack_damage = 1.35
-armor = 1.2
+max_health = 1.16
+attack_damage = 1.1
+armor = 1.1
 
 [multipliers.summit]
-max_health = 1.6
-attack_damage = 1.6
-armor = 1.3
+max_health = 1.25
+attack_damage = 1.15
+armor = 1.15
 
 [multipliers.pinnacle]
-max_health = 2.0
-attack_damage = 2.0
-armor = 1.5
+max_health = 1.35
+attack_damage = 1.2
+armor = 1.2
+
+[boss_multipliers.haven]
+max_health = 1.0
+attack_damage = 1.0
+armor = 1.0
+
+[boss_multipliers.frontier]
+max_health = 1.1
+attack_damage = 1.08
+armor = 1.05
+
+[boss_multipliers.ascent]
+max_health = 1.2
+attack_damage = 1.15
+armor = 1.12
+
+[boss_multipliers.summit]
+max_health = 1.35
+attack_damage = 1.25
+armor = 1.2
+
+[boss_multipliers.pinnacle]
+max_health = 1.5
+attack_damage = 1.35
+armor = 1.3
 ```
 
 ---

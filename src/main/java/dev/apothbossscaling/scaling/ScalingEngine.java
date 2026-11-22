@@ -50,20 +50,21 @@ public final class ScalingEngine {
         }
 
         // Classifica como boss (com vida base, ainda não escalada) e guarda para uso posterior.
-        mob.setData(ScalingAttachments.IS_BOSS.get(), EntityClassifier.isBoss(mob));
+        boolean boss = EntityClassifier.isBoss(mob);
+        mob.setData(ScalingAttachments.IS_BOSS.get(), boss);
 
         double playerMult = playerMultiplier(mob);
         double modMult = modMultiplier(mob);
-        double healthMult = ScalingConfig.maxHealthMultiplier(tierName) * playerMult * modMult;
-        double damageMult = ScalingConfig.attackDamageMultiplier(tierName) * playerMult * modMult;
-        double armorMult = ScalingConfig.armorMultiplier(tierName) * playerMult * modMult;
+        double healthMult = tierHealth(tierName, boss) * playerMult * modMult;
+        double damageMult = tierDamage(tierName, boss) * playerMult * modMult;
+        double armorMult = tierArmor(tierName, boss) * playerMult * modMult;
 
         float healthPct = mob.getHealth() / mob.getMaxHealth();
         if (ScalingConfig.scaleMaxHealth()) {
             AttributeScaler.applyMaxHealth(mob, healthMult);
         }
         if (ScalingConfig.scaleArmor()) {
-            AttributeScaler.applyArmor(mob, armorMult, ScalingConfig.armorCap());
+            AttributeScaler.applyArmor(mob, armorMult, boss ? ScalingConfig.bossArmorCap() : ScalingConfig.mobArmorCap());
         }
         mob.setData(ScalingAttachments.SCALED_TIER.get(), tierName);
         mob.setData(ScalingAttachments.DAMAGE_MULTIPLIER.get(), (float) damageMult);
@@ -73,52 +74,58 @@ public final class ScalingEngine {
     }
 
     private static void reapply(Mob mob, String tierName) {
+        boolean boss = mob.getData(ScalingAttachments.IS_BOSS.get());
         double playerMult = playerMultiplier(mob);
         double modMult = modMultiplier(mob);
-        double healthMult = ScalingConfig.maxHealthMultiplier(tierName) * playerMult * modMult;
-        double damageMult = ScalingConfig.attackDamageMultiplier(tierName) * playerMult * modMult;
-        double armorMult = ScalingConfig.armorMultiplier(tierName) * playerMult * modMult;
+        double healthMult = tierHealth(tierName, boss) * playerMult * modMult;
+        double damageMult = tierDamage(tierName, boss) * playerMult * modMult;
+        double armorMult = tierArmor(tierName, boss) * playerMult * modMult;
 
         float healthPct = mob.getHealth() / mob.getMaxHealth();
         if (ScalingConfig.scaleMaxHealth()) {
             AttributeScaler.applyMaxHealth(mob, healthMult);
         }
         if (ScalingConfig.scaleArmor()) {
-            AttributeScaler.applyArmor(mob, armorMult, ScalingConfig.armorCap());
+            AttributeScaler.applyArmor(mob, armorMult, boss ? ScalingConfig.bossArmorCap() : ScalingConfig.mobArmorCap());
         }
         mob.setData(ScalingAttachments.DAMAGE_MULTIPLIER.get(), (float) damageMult);
         mob.setHealth(healthPct * mob.getMaxHealth());
     }
 
-    /** Reavalia dinamicamente o scaling por jogadores de uma entidade já escalada. */
+    /**
+     * Reavalia o scaling de uma entidade já escalada. Reaplica os modificadores de forma idempotente
+     * (auto-cura: se uma fase/transformação remover atributos, eles voltam), e preserva a fração de vida
+     * quando o multiplicador por jogadores muda.
+     */
     public static void recomputePlayerScaling(Mob mob) {
         String tier = mob.getData(ScalingAttachments.SCALED_TIER.get());
         if (tier.isEmpty()) {
             return;
         }
 
+        boolean boss = mob.getData(ScalingAttachments.IS_BOSS.get());
         double playerMult = playerMultiplier(mob);
         double modMult = modMultiplier(mob);
-        double damageMult = ScalingConfig.attackDamageMultiplier(tier) * playerMult * modMult;
+        double damageMult = tierDamage(tier, boss) * playerMult * modMult;
+        double healthMult = tierHealth(tier, boss) * playerMult * modMult;
+        double armorMult = tierArmor(tier, boss) * playerMult * modMult;
 
         float current = mob.getData(ScalingAttachments.DAMAGE_MULTIPLIER.get());
-        if (Math.abs(damageMult - current) < 1e-4) {
-            return; // sem mudança no número de jogadores
-        }
+        boolean changed = Math.abs(damageMult - current) >= 1e-4;
 
-        double healthMult = ScalingConfig.maxHealthMultiplier(tier) * playerMult * modMult;
-        double armorMult = ScalingConfig.armorMultiplier(tier) * playerMult * modMult;
         float healthPct = mob.getHealth() / mob.getMaxHealth();
         if (ScalingConfig.scaleMaxHealth()) {
             AttributeScaler.applyMaxHealth(mob, healthMult);
         }
         if (ScalingConfig.scaleArmor()) {
-            AttributeScaler.applyArmor(mob, armorMult, ScalingConfig.armorCap());
+            AttributeScaler.applyArmor(mob, armorMult, boss ? ScalingConfig.bossArmorCap() : ScalingConfig.mobArmorCap());
         }
-        mob.setData(ScalingAttachments.DAMAGE_MULTIPLIER.get(), (float) damageMult);
-        mob.setHealth(healthPct * mob.getMaxHealth());
 
-        ScalingConfig.debug("Reescalado {} por jogadores próximos (vida x{}, dano x{}, armadura x{})", mob.getName().getString(), healthMult, damageMult, armorMult);
+        if (changed) {
+            mob.setData(ScalingAttachments.DAMAGE_MULTIPLIER.get(), (float) damageMult);
+            mob.setHealth(healthPct * mob.getMaxHealth());
+            ScalingConfig.debug("Reescalado {} por jogadores próximos (vida x{}, dano x{}, armadura x{})", mob.getName().getString(), healthMult, damageMult, armorMult);
+        }
     }
 
     /** Tick global do servidor para reavaliação dinâmica (chamado a cada ~2s). */
@@ -137,6 +144,18 @@ public final class ScalingEngine {
                 }
             }
         }
+    }
+
+    private static double tierHealth(String tier, boolean boss) {
+        return boss ? ScalingConfig.bossMaxHealthMultiplier(tier) : ScalingConfig.maxHealthMultiplier(tier);
+    }
+
+    private static double tierDamage(String tier, boolean boss) {
+        return boss ? ScalingConfig.bossAttackDamageMultiplier(tier) : ScalingConfig.attackDamageMultiplier(tier);
+    }
+
+    private static double tierArmor(String tier, boolean boss) {
+        return boss ? ScalingConfig.bossArmorMultiplier(tier) : ScalingConfig.armorMultiplier(tier);
     }
 
     /** Multiplicador do mod (vanilla vs outros mods vs overrides por mod). Bosses do Apotheosis têm fator próprio. */
